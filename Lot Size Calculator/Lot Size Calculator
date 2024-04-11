@@ -1,0 +1,63 @@
+//@version=5
+indicator("Calculadora de Lotaje V1 - Acero FX", overlay=true)
+
+// Configuraciones de entrada para el usuario
+//sizeOption = input.string("Mediano", "Tamaño de la Tabla", options=["Grande", "Mediano", "Pequeño", "Tiny"])
+
+// Entradas manuales
+accountSize = input.float(1000.0, "Tamaño de la Cuenta ($)")
+// Modificación para el tipo de riesgo con radio button
+riskType = input.string("Porcentaje", "Riesgo en", options=["Porcentaje", "Monto"])
+var float riskValue = na
+var float riskAmount = na
+if riskType == "Porcentaje"
+    riskValue := input.float(2.0, "Riesgo (%)", step=0.1, minval=0.1, maxval=100.0)
+else
+    riskAmount := input.float(20.0, "Riesgo ($)", step=1.0, minval=1.0)
+entryPrice = input.float(1.0, "Precio de Entrada")
+stopLossPrice = input.float(1.0, "Precio de Stop Loss")
+
+// Determinación automática del tamaño de la transacción
+var float contractSize = 1.0
+if syminfo.type == "EURUSD" or syminfo.ticker == "GBPUSD"
+    contractSize := 1.0
+else if syminfo.ticker == "US100" or syminfo.ticker == "US30"
+    contractSize := 10.0
+else if syminfo.ticker == "XAUUSD"
+    contractSize := 0.001
+
+// Cálculo del lotaje y del riesgo
+riskPerTrade = riskType == "Porcentaje" ? (accountSize * (riskValue / 100)) : riskAmount
+distanceToStop = math.abs(entryPrice - stopLossPrice)
+lotSize = math.round(riskPerTrade / (distanceToStop * contractSize) * 100) / 100
+riskPercentage = (riskPerTrade / accountSize) * 100
+
+// Crea una tabla solo si es la última barra visible en el gráfico
+var table lotajeTable = table.new(position.bottom_right, 6, 7, bgcolor = color.rgb(225, 226, 227, 13))
+var int row_lotaje = 0
+var int row_entrada = 1
+var int row_stoploss = 2
+var int row_contrato = 3
+var int row_riesgo_dinero = 4
+var int row_riesgo_porcentaje = 5
+
+if barstate.islast
+    // Actualiza la tabla con los nuevos valores
+    table.cell(lotajeTable, 0, row_lotaje, "Lotaje: ")
+    table.cell(lotajeTable, 1, row_lotaje, str.tostring(lotSize, '#.#####'))
+    
+    table.cell(lotajeTable, 0, row_entrada, "Entrada: ")
+    table.cell(lotajeTable, 1, row_entrada, str.tostring(entryPrice))
+    
+    table.cell(lotajeTable, 0, row_stoploss, "Stop Loss: ")
+    table.cell(lotajeTable, 1, row_stoploss, str.tostring(stopLossPrice))
+    
+    table.cell(lotajeTable, 0, row_contrato, "Tamaño del contrato: ")
+    table.cell(lotajeTable, 1, row_contrato, str.tostring(contractSize))
+    
+    // Modificado para mostrar riesgo en dinero y porcentaje
+    table.cell(lotajeTable, 0, row_riesgo_dinero, "Dinero a arriesgar: ")
+    table.cell(lotajeTable, 1, row_riesgo_dinero, "$" + str.tostring(riskPerTrade))
+    
+    table.cell(lotajeTable, 0, row_riesgo_porcentaje, "Riesgo (%): ")
+    table.cell(lotajeTable, 1, row_riesgo_porcentaje, str.tostring(riskPercentage, '#.##') + "%")
