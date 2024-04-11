@@ -1,21 +1,23 @@
 //@version=5
 indicator("Calculadora de Lotaje V4 - Forex - AUXUSD - US30 - US100 - Acero FX", overlay=true)
 
-// Configuraciones de entrada para el usuario
-//sizeOption = input.string("Mediano", "Tamaño de la Tabla", options=["Grande", "Mediano", "Pequeño", "Tiny"])
+// --- Tamaño de la cuenta ---
+accountSize = input.float(200000.0, "Tamaño de la Cuenta ($ USD)", group="Prueba 2 Hola Cuys. Aquí ponen el tamaño de la cuenta")
 
-// Entradas manuales
-accountSize = input.float(1000.0, "Tamaño de la Cuenta ($)")
-// Modificación para el tipo de riesgo con radio button
-riskType = input.string("Porcentaje", "Riesgo en", options=["Porcentaje", "Monto"])
-var float riskValue = na
-var float riskAmount = na
-if riskType == "Porcentaje"
-    riskValue := input.float(2.0, "Riesgo (%)", step=0.1, minval=0.1, maxval=100.0)
-else
-    riskAmount := input.float(20.0, "Riesgo ($)", step=1.0, minval=1.0)
-entryPrice = input.float(1.0, "Precio de Entrada")
-stopLossPrice = input.float(1.0, "Precio de Stop Loss")
+// --- Riesgo ---
+riskType = input.string("Porcentaje", "Riesgo en", options=["Porcentaje", "Monto"], tooltip="Selecciona 'Porcentaje' para definir el riesgo en porcentaje. Selecciona 'Monto' para definirlo mediante un monto en específico.", group="Riesgo")
+riskValue = riskType == "Porcentaje" ? input.float(0.25, "Riesgo (%)", step=0.1, minval=0.1, maxval=100.0, group="Riesgo") : na
+riskAmount = riskType == "Monto" ? input.float(500.0, "Riesgo ($)", step=1.0, minval=1.0, group="Riesgo") : na
+
+// --- Entradas ---
+// Determina si el par incluye JPY
+var bool isJPY = str.contains(syminfo.tickerid, "JPY")
+// Tipo de entrada para el Stop Loss
+stopType = input.string("Entrada y Stop Loss", "Tipo de entrada para Stop Loss", options=["Pips", "Entrada y Stop Loss"], tooltip="Selecciona 'Pips' para definir la distancia al stop loss en pips. Selecciona 'Entrada y Stop Loss' para definirlo mediante precios específicos.", group="Entradas")
+var float pipSize = isJPY ? 0.01 : 0.0001
+pipAmount = stopType == "Pips" ? input.float(4.2, "Distancia al Stop Loss (pips)", group="Entradas") : na
+entryPrice = stopType == "Entrada y Stop Loss" ? input.float(1.0, "Precio de Entrada", group="Entradas") : na
+stopLossPrice = stopType == "Entrada y Stop Loss" ? input.float(1.0, "Precio de Stop Loss", group="Entradas") : na
 
 // Determinación automática del tamaño de la transacción
 var float contractSize = 1.0
@@ -23,19 +25,19 @@ var int divider = 100
 if syminfo.type == "forex"
     contractSize := 1.0
     divider := 10000000
-else if syminfo.ticker == "US100" or syminfo.ticker == "US30"
+else if syminfo.type == "index"
     contractSize := 10.0
     divider := 100
 else if syminfo.ticker == "XAUUSD"
     contractSize := 0.001
     divider := 10000000
 
-// Cálculo del lotaje y del riesgo
-riskPerTrade = riskType == "Porcentaje" ? (accountSize * (riskValue / 100)) : riskAmount
-distanceToStop = math.abs(entryPrice - stopLossPrice)
-lotSize = math.round(riskPerTrade / (distanceToStop * contractSize * syminfo.pointvalue) * 100 / divider, 2)
-riskPercentage = (riskPerTrade / accountSize) * 100
+// Función que obtiene el precio actual de USD/JPY si el par es JPY
+// Si el par es JPY, obtener el precio actual de USD/JPY
+float usdJpyPrice = isJPY ? request.security("FOREXCOM:USDJPY", "D", open) : na
 
+// Cálculo del riesgo
+riskPerTrade = riskType == "Porcentaje" ? (accountSize * (riskValue / 100)) : riskAmount
 
 // Crea una tabla solo si es la última barra visible en el gráfico
 var table lotajeTable = table.new(position.bottom_right, 6, 7, bgcolor = color.rgb(225, 226, 227, 13))
@@ -47,22 +49,42 @@ var int row_riesgo_dinero = 4
 var int row_riesgo_porcentaje = 5
 
 if barstate.islast
+
+    // Calcular el valor del pip en USD si es un par JPY
+    float pipValueInUsd = (contractSize * pipSize) / usdJpyPrice
+
+    // Cálculo de la distancia al stop loss
+    float distanceToStop = stopType == "Pips" ? pipAmount * pipSize : math.abs(entryPrice - stopLossPrice)
+    
+    float lotSize = na
+    // Cálculo del lotaje usando el valor correcto del pip
+    if isJPY
+        lotSize := math.round(riskPerTrade / (distanceToStop * pipValueInUsd* syminfo.pointvalue) / divider, 2)
+    else if syminfo.ticker == "XAUUSD" and stopType == "Pips"
+        lotSize := math.round(riskPerTrade / (distanceToStop * contractSize * syminfo.pointvalue) / divider, 2)
+    else if syminfo.type == "index" and stopType == "Pips"
+        lotSize := math.round(riskPerTrade / (distanceToStop * contractSize * syminfo.pointvalue) / (divider * 10) , 2)
+    else
+        lotSize := math.round(riskPerTrade / (distanceToStop * contractSize * syminfo.pointvalue) * 100 / divider, 2)
+    riskPercentage = (riskPerTrade / accountSize) * 100
+
+
     // Actualiza la tabla con los nuevos valores
-    table.cell(lotajeTable, 0, row_lotaje, "Lotaje: ")
-    table.cell(lotajeTable, 1, row_lotaje, str.tostring(lotSize, '#.#####'))
+    table.cell(lotajeTable, 0, row_lotaje, " Lotaje: ")
+    table.cell(lotajeTable, 1, row_lotaje, " " + str.tostring(lotSize, '#.#####') + " ")
     
-    table.cell(lotajeTable, 0, row_entrada, "Entrada: ")
-    table.cell(lotajeTable, 1, row_entrada, str.tostring(entryPrice))
+    table.cell(lotajeTable, 0, row_entrada, " Entrada: ")
+    table.cell(lotajeTable, 1, row_entrada, " " + str.tostring(entryPrice) + " ")
     
-    table.cell(lotajeTable, 0, row_stoploss, "Stop Loss: ")
-    table.cell(lotajeTable, 1, row_stoploss, str.tostring(stopLossPrice))
+    table.cell(lotajeTable, 0, row_stoploss, " Stop Loss: ")
+    table.cell(lotajeTable, 1, row_stoploss, " " + str.tostring(stopLossPrice) + " ")
     
-    table.cell(lotajeTable, 0, row_contrato, "Tamaño del contrato: ")
-    table.cell(lotajeTable, 1, row_contrato, str.tostring(contractSize))
+    table.cell(lotajeTable, 0, row_contrato, "    Tamaño del contrato: ")
+    table.cell(lotajeTable, 1, row_contrato, " " + str.tostring(contractSize) + " ")
     
     // Modificado para mostrar riesgo en dinero y porcentaje
-    table.cell(lotajeTable, 0, row_riesgo_dinero, "Dinero a arriesgar: ")
-    table.cell(lotajeTable, 1, row_riesgo_dinero, "$" + str.tostring(riskPerTrade))
+    table.cell(lotajeTable, 0, row_riesgo_dinero, " Dinero a arriesgar: ")
+    table.cell(lotajeTable, 1, row_riesgo_dinero," " + "$" + str.tostring(riskPerTrade) + " ")
     
-    table.cell(lotajeTable, 0, row_riesgo_porcentaje, "Riesgo (%): ")
-    table.cell(lotajeTable, 1, row_riesgo_porcentaje, str.tostring(riskPercentage, '#.##') + "%")
+    table.cell(lotajeTable, 0, row_riesgo_porcentaje, " Riesgo (%): ")
+    table.cell(lotajeTable, 1, row_riesgo_porcentaje, " " + str.tostring(riskPercentage, '#.##') + "%" + " ")
