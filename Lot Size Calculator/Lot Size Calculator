@@ -1,5 +1,5 @@
 //@version=5
-indicator("Calculadora de Lotaje V1 - Acero FX", overlay=true)
+indicator("Calculadora de Lotaje V4 - Forex - AUXUSD - US30 - US100 - Acero FX", overlay=true)
 
 // Configuraciones de entrada para el usuario
 //sizeOption = input.string("Mediano", "Tamaño de la Tabla", options=["Grande", "Mediano", "Pequeño", "Tiny"])
@@ -19,18 +19,23 @@ stopLossPrice = input.float(1.0, "Precio de Stop Loss")
 
 // Determinación automática del tamaño de la transacción
 var float contractSize = 1.0
-if syminfo.type == "EURUSD" or syminfo.ticker == "GBPUSD"
+var int divider = 100
+if syminfo.type == "forex"
     contractSize := 1.0
+    divider := 10000000
 else if syminfo.ticker == "US100" or syminfo.ticker == "US30"
     contractSize := 10.0
+    divider := 100
 else if syminfo.ticker == "XAUUSD"
     contractSize := 0.001
+    divider := 10000000
 
 // Cálculo del lotaje y del riesgo
 riskPerTrade = riskType == "Porcentaje" ? (accountSize * (riskValue / 100)) : riskAmount
 distanceToStop = math.abs(entryPrice - stopLossPrice)
-lotSize = math.round(riskPerTrade / (distanceToStop * contractSize) * 100) / 100
+lotSize = math.round(riskPerTrade / (distanceToStop * contractSize * syminfo.pointvalue) * 100 / divider, 2)
 riskPercentage = (riskPerTrade / accountSize) * 100
+
 
 // Crea una tabla solo si es la última barra visible en el gráfico
 var table lotajeTable = table.new(position.bottom_right, 6, 7, bgcolor = color.rgb(225, 226, 227, 13))
