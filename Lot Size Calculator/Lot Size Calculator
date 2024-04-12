@@ -1,12 +1,12 @@
 //@version=5
-indicator("Calculadora de Lotaje V4 - Forex - AUXUSD - US30 - US100 - Acero FX", overlay=true)
+indicator("Calculadora de Lotaje V5 - Forex - AUXUSD - US30 - US100 - Acero FX", overlay=true)
 
 // --- Tamaño de la cuenta ---
-accountSize = input.float(200000.0, "Tamaño de la Cuenta ($ USD)", group="Prueba 2 Hola Cuys. Aquí ponen el tamaño de la cuenta")
+accountSize = input.float(200000.0, "Tamaño de la Cuenta ($ USD)", group="Tamaño de la cuenta")
 
 // --- Riesgo ---
 riskType = input.string("Porcentaje", "Riesgo en", options=["Porcentaje", "Monto"], tooltip="Selecciona 'Porcentaje' para definir el riesgo en porcentaje. Selecciona 'Monto' para definirlo mediante un monto en específico.", group="Riesgo")
-riskValue = riskType == "Porcentaje" ? input.float(0.25, "Riesgo (%)", step=0.1, minval=0.1, maxval=100.0, group="Riesgo") : na
+riskValue = riskType == "Porcentaje" ? input.float(0.25, "Riesgo (%)", step=0.1, minval=0.01, maxval=100.0, group="Riesgo") : na
 riskAmount = riskType == "Monto" ? input.float(500.0, "Riesgo ($)", step=1.0, minval=1.0, group="Riesgo") : na
 
 // --- Entradas ---
@@ -40,13 +40,16 @@ float usdJpyPrice = isJPY ? request.security("FOREXCOM:USDJPY", "D", open) : na
 riskPerTrade = riskType == "Porcentaje" ? (accountSize * (riskValue / 100)) : riskAmount
 
 // Crea una tabla solo si es la última barra visible en el gráfico
-var table lotajeTable = table.new(position.bottom_right, 6, 7, bgcolor = color.rgb(225, 226, 227, 13))
-var int row_lotaje = 0
-var int row_entrada = 1
-var int row_stoploss = 2
-var int row_contrato = 3
-var int row_riesgo_dinero = 4
-var int row_riesgo_porcentaje = 5
+var table lotajeTable = table.new(position.bottom_right, 10, 10, bgcolor = #e6e8eae1)
+var int row_title = 0
+var int row_instrument = 1
+var int row_lotaje = 2
+var int row_pips = 3
+var int row_entrada = 4
+var int row_stoploss = 5
+var int row_riesgo_dinero = 6
+var int row_riesgo_porcentaje = 7
+var int row_contrato = 8
 
 if barstate.islast
 
@@ -68,23 +71,35 @@ if barstate.islast
         lotSize := math.round(riskPerTrade / (distanceToStop * contractSize * syminfo.pointvalue) * 100 / divider, 2)
     riskPercentage = (riskPerTrade / accountSize) * 100
 
+    // Añadir título y nombre del instrumento
+    table.cell(lotajeTable, 0, row_title, "Calculadora de Lotaje - Acero FX", width = 25, text_color = color.white, text_halign = text.align_center, bgcolor = color.black)
+    table.cell(lotajeTable, 1, row_title, "", text_color = color.white, text_halign = text.align_center, bgcolor = color.black)
+    table.cell(lotajeTable, 0, row_instrument, "Instrumento:")
+    table.cell(lotajeTable, 1, row_instrument, syminfo.ticker  + "   ")
 
     // Actualiza la tabla con los nuevos valores
-    table.cell(lotajeTable, 0, row_lotaje, " Lotaje: ")
-    table.cell(lotajeTable, 1, row_lotaje, " " + str.tostring(lotSize, '#.#####') + " ")
+    table.cell(lotajeTable, 0, row_lotaje, "Lotaje:", bgcolor = color.rgb(255, 170, 44))
+    table.cell(lotajeTable, 1, row_lotaje, str.tostring(lotSize, '#.#####') + "   ", bgcolor = color.rgb(255, 170, 44))
+
+    if stopType == "Pips"
+        table.cell(lotajeTable, 0, row_pips, "Pips:")
+        table.cell(lotajeTable, 1, row_pips, str.tostring(pipAmount) + "   ")
+        table.clear(lotajeTable, 0, row_entrada)
+        table.clear(lotajeTable, 0, row_stoploss)
+    else
+        table.clear(lotajeTable, 0, row_pips)
+        table.cell(lotajeTable, 0, row_entrada, "Entrada: ")
+        table.cell(lotajeTable, 1, row_entrada, str.tostring(entryPrice) + "   ")
     
-    table.cell(lotajeTable, 0, row_entrada, " Entrada: ")
-    table.cell(lotajeTable, 1, row_entrada, " " + str.tostring(entryPrice) + " ")
-    
-    table.cell(lotajeTable, 0, row_stoploss, " Stop Loss: ")
-    table.cell(lotajeTable, 1, row_stoploss, " " + str.tostring(stopLossPrice) + " ")
-    
-    table.cell(lotajeTable, 0, row_contrato, "    Tamaño del contrato: ")
-    table.cell(lotajeTable, 1, row_contrato, " " + str.tostring(contractSize) + " ")
+        table.cell(lotajeTable, 0, row_stoploss, "Stop Loss: ")
+        table.cell(lotajeTable, 1, row_stoploss, str.tostring(stopLossPrice) + "   ")
     
     // Modificado para mostrar riesgo en dinero y porcentaje
-    table.cell(lotajeTable, 0, row_riesgo_dinero, " Dinero a arriesgar: ")
-    table.cell(lotajeTable, 1, row_riesgo_dinero," " + "$" + str.tostring(riskPerTrade) + " ")
+    table.cell(lotajeTable, 0, row_riesgo_dinero, "Dinero a arriesgar: ")
+    table.cell(lotajeTable, 1, row_riesgo_dinero, "$" + str.tostring(riskPerTrade) + "   ")
     
-    table.cell(lotajeTable, 0, row_riesgo_porcentaje, " Riesgo (%): ")
-    table.cell(lotajeTable, 1, row_riesgo_porcentaje, " " + str.tostring(riskPercentage, '#.##') + "%" + " ")
+    table.cell(lotajeTable, 0, row_riesgo_porcentaje, "Riesgo (%): ")
+    table.cell(lotajeTable, 1, row_riesgo_porcentaje, str.tostring(riskPercentage, '#.##') + "%" + "   ")
+
+    table.cell(lotajeTable, 0, row_contrato, "Tamaño del contrato: ")
+    table.cell(lotajeTable, 1, row_contrato, str.tostring(contractSize) + "   ")
